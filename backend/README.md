@@ -11,7 +11,7 @@ Print-job API for your Azure VM (Option 1: local PC agent polls jobs).
 
 ## Quick start
 ```bash
-cd azure-vm-service
+cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -31,6 +31,18 @@ Default API listens on `0.0.0.0:3000`.
 - `POST /api/upload`
 - `GET /api/jobs`
 - `GET /api/auth/me`
+
+## Add or update an account
+```bash
+cd backend
+source .venv/bin/activate
+python create_user.py --username alice --password 'StrongPass123!'
+```
+
+You can also seed users via `.env`:
+```env
+DEFAULT_USERS=admin:admin123,alice:alice123
+```
 
 ## Endpoints
 - `GET /health`

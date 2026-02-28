@@ -34,6 +34,12 @@ sudo systemctl status print-agent
 ## Behavior
 - Polls VM every few seconds
 - Downloads one job at a time
-- Prints with `lp -d <PRINTER_NAME>`
+- Renders source file to PDF on local device with hardcoded style, then prints via `lp -d <PRINTER_NAME>`
 - Reports `done`/`failed` to server
 - Always deletes local temp file after each attempt
+
+## Hardcoded print style
+The agent enforces fixed styling locally (users cannot change it):
+- Font: `Courier`
+- Font size: `10`
+- Margins and line spacing are fixed in `agent.py`

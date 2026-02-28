@@ -6,6 +6,9 @@ from urllib.parse import urljoin
 
 import requests
 from dotenv import load_dotenv
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfgen import canvas
 
 load_dotenv()
 
@@ -22,6 +25,13 @@ if not AGENT_TOKEN:
 Path(WORK_DIR).mkdir(parents=True, exist_ok=True)
 
 HEADERS = {"Authorization": f"Bearer {AGENT_TOKEN}"}
+
+# Hardcoded print style (user cannot override this).
+PDF_FONT_NAME = "Courier"
+PDF_FONT_SIZE = 10
+PDF_LINE_HEIGHT = 13
+PDF_MARGIN = 36
+TAB_SIZE = 4
 
 
 def api_get(path: str, **kwargs):
@@ -43,6 +53,50 @@ def print_file(local_path: Path):
         raise RuntimeError(f"lp failed (code={result.returncode}): {stderr or stdout}")
 
 
+def render_source_to_pdf(source_path: Path, pdf_path: Path) -> None:
+    text = source_path.read_text(encoding="utf-8", errors="replace")
+    lines = text.splitlines() or [""]
+
+    page_width, page_height = A4
+    usable_width = page_width - (2 * PDF_MARGIN)
+    usable_height = page_height - (2 * PDF_MARGIN)
+    lines_per_page = max(1, int(usable_height // PDF_LINE_HEIGHT))
+
+    # Monospace wrap width using actual glyph width for safer fitting.
+    char_width = pdfmetrics.stringWidth("M", PDF_FONT_NAME, PDF_FONT_SIZE)
+    max_cols = max(20, int(usable_width // max(char_width, 1)))
+
+    wrapped: list[str] = []
+    for line in lines:
+        expanded = line.expandtabs(TAB_SIZE)
+        if not expanded:
+            wrapped.append("")
+            continue
+        while len(expanded) > max_cols:
+            wrapped.append(expanded[:max_cols])
+            expanded = expanded[max_cols:]
+        wrapped.append(expanded)
+
+    c = canvas.Canvas(str(pdf_path), pagesize=A4)
+    c.setAuthor("Local Print Agent")
+    c.setTitle(source_path.name)
+
+    idx = 0
+    total = len(wrapped)
+    while idx < total:
+        c.setFont(PDF_FONT_NAME, PDF_FONT_SIZE)
+        y = page_height - PDF_MARGIN
+        for _ in range(lines_per_page):
+            if idx >= total:
+                break
+            c.drawString(PDF_MARGIN, y, wrapped[idx])
+            y -= PDF_LINE_HEIGHT
+            idx += 1
+        c.showPage()
+
+    c.save()
+
+
 def loop_once():
     res = api_get(f"/api/agent/jobs/next?agent_id={AGENT_ID}")
     res.raise_for_status()
@@ -57,6 +111,7 @@ def loop_once():
     download_url = job["download_url"]
 
     local_path = Path(WORK_DIR) / f"{job_id}_{os.path.basename(filename)}"
+    pdf_path = Path(WORK_DIR) / f"{job_id}_rendered.pdf"
 
     try:
         dl = api_get(download_url, stream=True)
@@ -66,7 +121,8 @@ def loop_once():
                 if chunk:
                     f.write(chunk)
 
-        print_file(local_path)
+        render_source_to_pdf(local_path, pdf_path)
+        print_file(pdf_path)
         done = api_post(f"/api/agent/jobs/{job_id}/done")
         done.raise_for_status()
         print(f"[DONE] job={job_id} file={filename}")
@@ -79,6 +135,8 @@ def loop_once():
     finally:
         if local_path.exists():
             local_path.unlink()
+        if pdf_path.exists():
+            pdf_path.unlink()
 
     return True
 
