@@ -296,6 +296,7 @@ def agent_next_job():
                 "id": row["id"],
                 "filename": row["original_name"],
                 "ext": row["ext"],
+                "requested_by": row["requested_by"],
                 "download_url": f"/api/agent/jobs/{row['id']}/download",
             },
         }

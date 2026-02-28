@@ -32,6 +32,8 @@ PDF_FONT_SIZE = 10
 PDF_LINE_HEIGHT = 13
 PDF_MARGIN = 36
 TAB_SIZE = 4
+HEADER_GAP_LINES = 2
+HEADER_FONT_NAME = "Courier-Bold"
 
 
 def api_get(path: str, **kwargs):
@@ -53,14 +55,14 @@ def print_file(local_path: Path):
         raise RuntimeError(f"lp failed (code={result.returncode}): {stderr or stdout}")
 
 
-def render_source_to_pdf(source_path: Path, pdf_path: Path) -> None:
+def render_source_to_pdf(source_path: Path, pdf_path: Path, requested_by: str) -> None:
     text = source_path.read_text(encoding="utf-8", errors="replace")
     lines = text.splitlines() or [""]
 
     page_width, page_height = A4
     usable_width = page_width - (2 * PDF_MARGIN)
     usable_height = page_height - (2 * PDF_MARGIN)
-    lines_per_page = max(1, int(usable_height // PDF_LINE_HEIGHT))
+    lines_per_page = max(1, int(usable_height // PDF_LINE_HEIGHT) - HEADER_GAP_LINES)
 
     # Monospace wrap width using actual glyph width for safer fitting.
     char_width = pdfmetrics.stringWidth("M", PDF_FONT_NAME, PDF_FONT_SIZE)
@@ -83,9 +85,12 @@ def render_source_to_pdf(source_path: Path, pdf_path: Path) -> None:
 
     idx = 0
     total = len(wrapped)
+    header_text = f"Team: {requested_by or 'unknown'}"
     while idx < total:
+        c.setFont(HEADER_FONT_NAME, PDF_FONT_SIZE)
+        c.drawString(PDF_MARGIN, page_height - PDF_MARGIN, header_text)
         c.setFont(PDF_FONT_NAME, PDF_FONT_SIZE)
-        y = page_height - PDF_MARGIN
+        y = page_height - PDF_MARGIN - (PDF_LINE_HEIGHT * HEADER_GAP_LINES)
         for _ in range(lines_per_page):
             if idx >= total:
                 break
@@ -109,6 +114,7 @@ def loop_once():
     job_id = job["id"]
     filename = job.get("filename", f"job-{job_id}")
     download_url = job["download_url"]
+    requested_by = str(job.get("requested_by", "")).strip()
 
     local_path = Path(WORK_DIR) / f"{job_id}_{os.path.basename(filename)}"
     pdf_path = Path(WORK_DIR) / f"{job_id}_rendered.pdf"
@@ -121,7 +127,7 @@ def loop_once():
                 if chunk:
                     f.write(chunk)
 
-        render_source_to_pdf(local_path, pdf_path)
+        render_source_to_pdf(local_path, pdf_path, requested_by=requested_by)
         print_file(pdf_path)
         done = api_post(f"/api/agent/jobs/{job_id}/done")
         done.raise_for_status()
