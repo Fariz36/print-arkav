@@ -1,0 +1,16 @@
+[Unit]
+Description=Local Print Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/local-device-agent
+EnvironmentFile=/opt/local-device-agent/.env
+ExecStart=/opt/local-device-agent/.venv/bin/python /opt/local-device-agent/agent.py
+Restart=always
+RestartSec=3
+User=fariz
+
+[Install]
+WantedBy=multi-user.target
