@@ -5,7 +5,7 @@ Print-job API for your Azure VM (Option 1: local PC agent polls jobs).
 ## Features
 - User login (`username/password`)
 - Upload `.cpp`, `.c`, `.py`, `.java` after login
-- Queue jobs in SQLite with `requested_by`
+- Queue jobs in SQLite with `requested_by` (team name)
 - Agent endpoints to claim/download/mark done
 - Deletes uploaded file from VM when job marked done
 
@@ -36,12 +36,25 @@ Default API listens on `0.0.0.0:3000`.
 ```bash
 cd backend
 source .venv/bin/activate
-python create_user.py --username alice --password 'StrongPass123!'
+python create_user.py --team-name "Team Alpha" --username alice --password 'StrongPass123!'
 ```
 
 You can also seed users via `.env`:
 ```env
 DEFAULT_USERS=admin:admin123,alice:alice123
+```
+
+## Bulk import team credentials
+Prepare a text file with this format per line:
+```text
+<team name> - <username>:<password>
+```
+
+Then import:
+```bash
+cd backend
+source .venv/bin/activate
+python import_team_credentials.py --file ./team_credentials.txt
 ```
 
 ## Endpoints

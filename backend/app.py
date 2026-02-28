@@ -69,6 +69,7 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE,
+                team_name TEXT NOT NULL,
                 password_hash TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )
@@ -80,6 +81,11 @@ def init_db() -> None:
         col_names = {c["name"] for c in cols}
         if "requested_by" not in col_names:
             conn.execute("ALTER TABLE jobs ADD COLUMN requested_by TEXT")
+        user_cols = conn.execute("PRAGMA table_info(users)").fetchall()
+        user_col_names = {c["name"] for c in user_cols}
+        if "team_name" not in user_col_names:
+            conn.execute("ALTER TABLE users ADD COLUMN team_name TEXT")
+            conn.execute("UPDATE users SET team_name = username WHERE team_name IS NULL OR team_name = ''")
 
         ensure_default_users(conn)
 
@@ -130,8 +136,8 @@ def ensure_default_users(conn: sqlite3.Connection) -> None:
         ).fetchone()
         if exists is None:
             conn.execute(
-                "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
-                (username, generate_password_hash(password), now),
+                "INSERT INTO users (username, team_name, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                (username, username, generate_password_hash(password), now),
             )
 
 
@@ -211,12 +217,21 @@ def login():
 @app.get("/api/auth/me")
 def me():
     username = require_user_auth()
-    return jsonify({"ok": True, "username": username})
+    db = get_db()
+    row = db.execute("SELECT team_name FROM users WHERE username = ?", (username,)).fetchone()
+    team_name = row["team_name"] if row else username
+    return jsonify({"ok": True, "username": username, "team_name": team_name})
 
 
 @app.post("/api/upload")
 def upload_job():
     username = require_user_auth()
+    db = get_db()
+    user_row = db.execute(
+        "SELECT team_name FROM users WHERE username = ?",
+        (username,),
+    ).fetchone()
+    team_name = user_row["team_name"] if user_row and user_row["team_name"] else username
 
     if "file" not in request.files:
         abort(400, description="'file' is required")
@@ -241,14 +256,13 @@ def upload_job():
     with open(file_path, "wb") as f:
         f.write(payload)
 
-    db = get_db()
     cur = db.execute(
         """
         INSERT INTO jobs (
             original_name, stored_name, file_path, ext, status, created_at, updated_at, requested_by
         ) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
         """,
-        (safe_name, stored_name, file_path, ext, now, now, username),
+        (safe_name, stored_name, file_path, ext, now, now, team_name),
     )
     db.commit()
 
@@ -258,7 +272,7 @@ def upload_job():
             "job_id": cur.lastrowid,
             "filename": safe_name,
             "status": "pending",
-            "requested_by": username,
+            "requested_by": team_name,
         }
     ), 201
 
@@ -381,6 +395,11 @@ def agent_failed_job(job_id: int):
 def list_jobs():
     username = require_user_auth()
     db = get_db()
+    user_row = db.execute(
+        "SELECT team_name FROM users WHERE username = ?",
+        (username,),
+    ).fetchone()
+    team_name = user_row["team_name"] if user_row and user_row["team_name"] else username
     rows = db.execute(
         """
         SELECT id, original_name, ext, status, requested_by, assigned_agent_id, created_at, updated_at, fail_reason
@@ -389,7 +408,7 @@ def list_jobs():
         ORDER BY id DESC
         LIMIT 100
         """,
-        (username,),
+        (team_name,),
     ).fetchall()
 
     items = [dict(r) for r in rows]
