@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 const ACCEPT = '.cpp,.c,.py,.java'
 const TOKEN_KEY = 'print_portal_token'
 const USER_KEY = 'print_portal_user'
+const DISPLAY_KEY = 'print_portal_display_name'
 
 function api(path, options = {}, token) {
   const headers = { ...(options.headers || {}) }
@@ -25,6 +26,7 @@ function api(path, options = {}, token) {
 
 export default function App() {
   const [username, setUsername] = useState(localStorage.getItem(USER_KEY) || '')
+  const [displayName, setDisplayName] = useState(localStorage.getItem(DISPLAY_KEY) || '')
   const [password, setPassword] = useState('')
   const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY) || '')
   const [file, setFile] = useState(null)
@@ -47,6 +49,9 @@ export default function App() {
         if (data.username) {
           setUsername(data.username)
           localStorage.setItem(USER_KEY, data.username)
+          const resolvedDisplayName = data.team_name || data.username
+          setDisplayName(resolvedDisplayName)
+          localStorage.setItem(DISPLAY_KEY, resolvedDisplayName)
           refreshJobs(token).catch(() => {})
         }
       })
@@ -68,10 +73,16 @@ export default function App() {
       const resolvedUsername = data.username || username
       setToken(data.access_token)
       setUsername(resolvedUsername)
+      setDisplayName(resolvedUsername)
       localStorage.setItem(TOKEN_KEY, data.access_token)
       localStorage.setItem(USER_KEY, resolvedUsername)
+      localStorage.setItem(DISPLAY_KEY, resolvedUsername)
       setPassword('')
-      setMessage(`Logged in as ${resolvedUsername}`)
+      const me = await api('/api/auth/me', {}, data.access_token)
+      const resolvedDisplayName = me.team_name || me.username || resolvedUsername
+      setDisplayName(resolvedDisplayName)
+      localStorage.setItem(DISPLAY_KEY, resolvedDisplayName)
+      setMessage(`Logged in as ${resolvedDisplayName}`)
       await refreshJobs(data.access_token)
     } catch (err) {
       setMessage(err.message)
@@ -86,6 +97,7 @@ export default function App() {
     setPassword('')
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
+    localStorage.removeItem(DISPLAY_KEY)
     setMessage('Logged out')
   }
 
@@ -145,7 +157,7 @@ export default function App() {
         ) : (
           <>
             <div className="user-row">
-              <span>Signed in as <strong>{username}</strong></span>
+              <span>Signed in as <strong>{displayName || username}</strong></span>
               <button className="ghost" onClick={logout} type="button">Logout</button>
             </div>
 
