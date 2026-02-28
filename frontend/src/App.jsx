@@ -65,11 +65,13 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       })
+      const resolvedUsername = data.username || username
       setToken(data.access_token)
+      setUsername(resolvedUsername)
       localStorage.setItem(TOKEN_KEY, data.access_token)
-      localStorage.setItem(USER_KEY, data.username)
+      localStorage.setItem(USER_KEY, resolvedUsername)
       setPassword('')
-      setMessage(`Logged in as ${data.username}`)
+      setMessage(`Logged in as ${resolvedUsername}`)
       await refreshJobs(data.access_token)
     } catch (err) {
       setMessage(err.message)
@@ -125,9 +127,7 @@ export default function App() {
       <div className="grain" />
       <main className="panel">
         <header>
-          <p className="eyebrow">PRINT PORTAL</p>
-          <h1>Ship code to paper.</h1>
-          <p className="sub">Upload source files and queue a print job to the local printer bridge.</p>
+          <p className="eyebrow">PRINT</p>
         </header>
 
         {!loggedIn ? (
