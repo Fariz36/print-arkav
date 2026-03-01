@@ -1,3 +1,4 @@
+import argparse
 import os
 import subprocess
 import time
@@ -34,6 +35,8 @@ PDF_MARGIN = 36
 TAB_SIZE = 4
 HEADER_GAP_LINES = 2
 HEADER_FONT_NAME = "Courier-Bold"
+LINE_NUMBER_SEPARATOR = " | "
+COPIES = 1
 
 
 def api_get(path: str, **kwargs):
@@ -47,7 +50,8 @@ def api_post(path: str, **kwargs):
 
 
 def print_file(local_path: Path):
-    cmd = ["lp", "-d", PRINTER_NAME, str(local_path)]
+    copies = max(1, int(COPIES))
+    cmd = ["lp", "-d", PRINTER_NAME, "-n", str(copies), str(local_path)]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         stderr = (result.stderr or "").strip()
@@ -66,18 +70,25 @@ def render_source_to_pdf(source_path: Path, pdf_path: Path, requested_by: str) -
 
     # Monospace wrap width using actual glyph width for safer fitting.
     char_width = pdfmetrics.stringWidth("M", PDF_FONT_NAME, PDF_FONT_SIZE)
-    max_cols = max(20, int(usable_width // max(char_width, 1)))
+    line_digits = max(2, len(str(len(lines))))
+    gutter_chars = line_digits + len(LINE_NUMBER_SEPARATOR)
+    gutter_width = gutter_chars * max(char_width, 1)
+    code_width = max(20 * max(char_width, 1), usable_width - gutter_width)
+    max_code_cols = max(20, int(code_width // max(char_width, 1)))
 
-    wrapped: list[str] = []
-    for line in lines:
+    wrapped: list[tuple[str, str]] = []
+    for idx, line in enumerate(lines, start=1):
         expanded = line.expandtabs(TAB_SIZE)
+        prefix = f"{str(idx).rjust(line_digits)}{LINE_NUMBER_SEPARATOR}"
         if not expanded:
-            wrapped.append("")
+            wrapped.append((prefix, ""))
             continue
-        while len(expanded) > max_cols:
-            wrapped.append(expanded[:max_cols])
-            expanded = expanded[max_cols:]
-        wrapped.append(expanded)
+        first = True
+        while len(expanded) > max_code_cols:
+            wrapped.append((prefix if first else " " * gutter_chars, expanded[:max_code_cols]))
+            expanded = expanded[max_code_cols:]
+            first = False
+        wrapped.append((prefix if first else " " * gutter_chars, expanded))
 
     c = canvas.Canvas(str(pdf_path), pagesize=A4)
     c.setAuthor("Local Print Agent")
@@ -94,7 +105,9 @@ def render_source_to_pdf(source_path: Path, pdf_path: Path, requested_by: str) -
         for _ in range(lines_per_page):
             if idx >= total:
                 break
-            c.drawString(PDF_MARGIN, y, wrapped[idx])
+            line_no_text, code_text = wrapped[idx]
+            c.drawString(PDF_MARGIN, y, line_no_text)
+            c.drawString(PDF_MARGIN + gutter_width, y, code_text)
             y -= PDF_LINE_HEIGHT
             idx += 1
         c.showPage()
@@ -113,6 +126,7 @@ def loop_once():
 
     job_id = job["id"]
     filename = job.get("filename", f"job-{job_id}")
+    ext = str(job.get("ext", "")).lower()
     download_url = job["download_url"]
     requested_by = str(job.get("requested_by", "")).strip()
 
@@ -127,8 +141,12 @@ def loop_once():
                 if chunk:
                     f.write(chunk)
 
-        render_source_to_pdf(local_path, pdf_path, requested_by=requested_by)
-        print_file(pdf_path)
+        if ext == ".pdf":
+            # Keep user PDF as-is; no code rendering overlays.
+            print_file(local_path)
+        else:
+            render_source_to_pdf(local_path, pdf_path, requested_by=requested_by)
+            print_file(pdf_path)
         done = api_post(f"/api/agent/jobs/{job_id}/done")
         done.raise_for_status()
         print(f"[DONE] job={job_id} file={filename}")
@@ -165,4 +183,13 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Local print agent")
+    parser.add_argument(
+        "--copies",
+        type=int,
+        default=1,
+        help="Number of copies per print job (default: 1)",
+    )
+    args = parser.parse_args()
+    COPIES = max(1, args.copies)
     main()

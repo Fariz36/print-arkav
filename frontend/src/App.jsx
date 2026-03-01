@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
-const ACCEPT = '.cpp,.c,.py,.java'
+const ACCEPT = '.cpp,.c,.py,.java,.pdf'
 const TOKEN_KEY = 'print_portal_token'
 const USER_KEY = 'print_portal_user'
 const DISPLAY_KEY = 'print_portal_display_name'

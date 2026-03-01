@@ -22,7 +22,7 @@ APP_SECRET = os.getenv("APP_SECRET", "change-this-secret")
 ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("ACCESS_TOKEN_TTL_SECONDS", str(12 * 60 * 60)))
 DEFAULT_USERS = os.getenv("DEFAULT_USERS", "admin:admin123")
 
-ALLOWED_EXTENSIONS = {".cpp", ".py", ".c", ".java"}
+ALLOWED_EXTENSIONS = {".cpp", ".py", ".c", ".java", ".pdf"}
 
 app = Flask(__name__)
 Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
